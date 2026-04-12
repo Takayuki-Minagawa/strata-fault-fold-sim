@@ -56,14 +56,17 @@ export function Toolbar() {
           + {t.toolbar.addLayer}
         </button>
         <button className={openPanel === 'stress' ? btnActive : btnSecondary}
+          disabled={geoState.layers.length === 0}
           onClick={() => togglePanel('stress')}>
           {t.toolbar.stress}
         </button>
         <button className={openPanel === 'fault' ? btnActive : btnSecondary}
+          disabled={geoState.layers.length === 0}
           onClick={() => togglePanel('fault')}>
           {t.toolbar.fault}
         </button>
         <button className={openPanel === 'fold' ? btnActive : btnSecondary}
+          disabled={geoState.layers.length === 0}
           onClick={() => togglePanel('fold')}>
           {t.toolbar.fold}
         </button>

@@ -119,10 +119,14 @@ export function applyStress(state: GeoState, action: ApplyStressAction): GeoStat
 // ─── 3. 断層変位 ─────────────────────────────────────────────────
 
 /**
- * 断層線の左側（上盤/下盤）ブロックを変位させる。
- * 正断層: 上盤（断層面の上側ブロック）が下がる。
- * 逆断層: 上盤が上がる。
- * 横ずれ: 右側ブロックが水平にずれる。
+ * 断層線の左側（上盤）ブロックを変位させる。
+ * 正断層: 上盤が下がる（SVG Y 増加）。
+ * 逆断層: 上盤が上がる（SVG Y 減少）。
+ * 横ずれ: 上盤が水平にずれる。
+ *
+ * ツールバーは常に垂直断層（start.x === end.x）を生成するため、
+ * 法線ベクトル経由では ny = 0 になり垂直変位がゼロになる問題があった。
+ * 断層タイプに応じて変位を直接適用する方式に変更。
  */
 export function applyFault(state: GeoState, action: ApplyFaultAction): GeoState {
   const { fault } = action;
@@ -131,28 +135,22 @@ export function applyFault(state: GeoState, action: ApplyFaultAction): GeoState 
 
   const { start, end, type, displacement } = fault;
 
-  // 断層線の向きベクトル
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const len = Math.sqrt(dx * dx + dy * dy) || 1;
-  const nx = -dy / len; // 法線 X（断層面左側が正）
-  const ny =  dx / len; // 法線 Y
-
   const newLayers = layers.map(layer => {
     const verts = cloneVertices(layer.vertices);
     for (const p of verts) {
       // 点が断層線のどちら側かを判定（外積の符号）
+      // 垂直断層では (p.x - start.x) * (end.y - start.y) の符号になる
       const side = (p.x - start.x) * (end.y - start.y) - (p.y - start.y) * (end.x - start.x);
       if (side > 0) continue; // 断層右側は動かさない
 
       if (type === 'normal') {
-        // 上盤（左側）を断層面方向に沿って下へ
-        p.x += nx * displacement * 0.5;
-        p.y += Math.abs(ny) * displacement;
+        // 正断層: 上盤が下方に滑る（Y 増加）
+        p.y += displacement;
       } else if (type === 'reverse') {
-        p.x -= nx * displacement * 0.5;
-        p.y -= Math.abs(ny) * displacement;
+        // 逆断層: 上盤が上方に乗り上げる（Y 減少）
+        p.y -= displacement;
       } else if (type === 'strike-slip') {
+        // 横ずれ断層: 上盤が左方向に水平移動
         p.x -= displacement;
       }
     }
@@ -182,7 +180,8 @@ export function applyFold(state: GeoState, action: ApplyFoldAction): GeoState {
     const verts = cloneVertices(layer.vertices);
     for (const p of verts) {
       const relX = p.x - centerX;
-      const wave = Math.sin((relX / wavelength) * Math.PI * 2);
+      // cos を使うことで relX=0（= centerX）で最大変位になる
+      const wave = Math.cos((relX / wavelength) * Math.PI * 2);
       p.y += sign * amplitude * wave;
     }
     return { ...layer, vertices: verts };
@@ -201,9 +200,10 @@ export function erode(state: GeoState): GeoState {
   const { layers } = state;
   if (layers.length === 0) return state;
 
-  // 現在の最上面 Y（全頂点の最小 Y）
-  const allTopY = layers.flatMap(l => l.vertices.map(p => p.y));
-  const cutY = Math.min(...allTopY);
+  // 各層の上面頂点（vertices[0], vertices[1]）の Y 平均を侵食面とする。
+  // Math.min() では「最高点」になって何も削れないため平均値を使う。
+  const topYValues = layers.flatMap(l => [l.vertices[0].y, l.vertices[1].y]);
+  const cutY = topYValues.reduce((s, y) => s + y, 0) / topYValues.length;
 
   const newLayers: Layer[] = [];
   for (const layer of layers) {
