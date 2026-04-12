@@ -39,7 +39,7 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const { geoState } = useGeoStore();
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   const isDark = theme === 'dark';
   const bg = isDark ? '#1a1b23' : '#f0f4f8';
@@ -112,7 +112,7 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
         {/* 岩相ラベル */}
         <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
           fontSize="11" fill={textColor} opacity="0.8" style={{ pointerEvents: 'none' }}>
-          {isDark ? rock.nameJa : rock.nameJa}
+          {lang === 'ja' ? rock.nameJa : rock.nameEn}
         </text>
       </g>
     );
