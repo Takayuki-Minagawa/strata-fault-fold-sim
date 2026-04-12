@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# 地層・断層・褶曲シミュレーター
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+高校地学・地学基礎向けの Web 教材。地層の堆積から応力変形・断層・褶曲・削剥までを  
+インタラクティブに体験できます。
 
-Currently, two official plugins are available:
+**公開 URL**: https://takayuki-minagawa.github.io/strata-fault-fold-sim/
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 機能
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| 機能 | 内容 |
+|------|------|
+| 地層堆積 | 岩相（砂岩・泥岩・石灰岩・凝灰岩・礫岩・チャート）と厚さを選んで追加 |
+| 応力操作 | 水平圧縮 / 水平伸張 / せん断をスライダーで調整 |
+| 断層 | 正断層・逆断層・横ずれ断層を任意の位置に形成 |
+| 褶曲 | 背斜・向斜を波長・振幅・中心位置で指定 |
+| 削剥 | 現在の上面を水平にカットして不整合面を形成 |
+| タイムライン | 操作履歴の可視化・任意ステップへのジャンプ・アンドゥ/リドゥ |
+| 学習パネル | 現在の断面の地質史を自動解説 |
+| クイズ | 構造名・形成順・応力方向を問う3種のクイズ |
+| i18n | 日本語 / English 切替 |
+| テーマ | ライト / ダーク切替 |
+| レスポンシブ | PC・タブレット・スマホ対応 |
 
-## Expanding the ESLint configuration
+## 技術スタック
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **React + TypeScript + Vite**
+- **Tailwind CSS** — スタイリング
+- **Zustand** — 状態管理（操作履歴・アンドゥ/リドゥ）
+- **SVG** — 地質断面の描画
+- **GitHub Actions** — GitHub Pages への自動デプロイ
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## ローカル実行
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## ビルド
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
 ```
+
+## デプロイ
+
+`main` ブランチへの push で GitHub Actions が自動的に GitHub Pages へデプロイします。  
+リポジトリの **Settings → Pages → Source** を **GitHub Actions** に設定してください。
+
+## ライセンス
+
+MIT
