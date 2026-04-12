@@ -81,7 +81,9 @@ export function Toolbar() {
       <div className="flex gap-2">
         <button className={btnSecondary} disabled={!canUndo} onClick={undo}>← {t.toolbar.undo}</button>
         <button className={btnSecondary} disabled={!canRedo} onClick={redo}>{t.toolbar.redo} →</button>
-        <button className={btnDanger} onClick={reset}>{t.toolbar.reset}</button>
+        <button className={btnDanger} onClick={() => { reset(); setOpenPanel(null); }}>
+          {t.toolbar.reset}
+        </button>
 
         {/* テーマ切替 */}
         <button className={btnSecondary} onClick={toggleTheme}>

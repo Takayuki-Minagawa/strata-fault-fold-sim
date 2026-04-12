@@ -97,7 +97,12 @@ export const useGeoStore = create<GeoStore>((set, get) => ({
   geoState: initialGeoState,
 
   dispatch(action) {
-    const { history, currentStep, viewWidth, viewHeight } = get();
+    const { history, currentStep, viewWidth, viewHeight, geoState: currentGeoState } = get();
+    const requiresLayers = action.type !== 'ADD_LAYER';
+
+    // 空状態では構造操作・削剥は no-op なので履歴に積まない。
+    if (requiresLayers && currentGeoState.layers.length === 0) return;
+
     // リドゥ履歴を切り捨てる
     const trimmed = history.slice(0, currentStep + 1);
     const { ja, en } = makeLabel(action);
@@ -109,12 +114,12 @@ export const useGeoStore = create<GeoStore>((set, get) => ({
     };
     const newHistory = [...trimmed, entry];
     const newStep = newHistory.length - 1;
-    const geoState = replayActions(
+    const nextGeoState = replayActions(
       newHistory.map(e => e.action),
       viewWidth,
       viewHeight,
     );
-    set({ history: newHistory, currentStep: newStep, geoState });
+    set({ history: newHistory, currentStep: newStep, geoState: nextGeoState });
   },
 
   jumpTo(step) {
