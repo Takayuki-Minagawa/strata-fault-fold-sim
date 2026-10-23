@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+import { loadItem, saveItem } from '../utils/storage';
 
 type Theme = 'light' | 'dark';
+
+const STORAGE_KEY = 'strata-sim:theme';
 
 interface ThemeStore {
   theme: Theme;
@@ -8,9 +11,16 @@ interface ThemeStore {
   setTheme: (theme: Theme) => void;
 }
 
+function applyTheme(theme: Theme) {
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  saveItem(STORAGE_KEY, theme);
+}
+
 export const useTheme = create<ThemeStore>((set) => {
+  const saved = loadItem(STORAGE_KEY);
   const initial: Theme =
-    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    saved === 'light' || saved === 'dark' ? saved
+    : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 
   // 初期適用
   document.documentElement.classList.toggle('dark', initial === 'dark');
@@ -20,12 +30,12 @@ export const useTheme = create<ThemeStore>((set) => {
     toggle() {
       set(state => {
         const next: Theme = state.theme === 'light' ? 'dark' : 'light';
-        document.documentElement.classList.toggle('dark', next === 'dark');
+        applyTheme(next);
         return { theme: next };
       });
     },
     setTheme(theme) {
-      document.documentElement.classList.toggle('dark', theme === 'dark');
+      applyTheme(theme);
       set({ theme });
     },
   };

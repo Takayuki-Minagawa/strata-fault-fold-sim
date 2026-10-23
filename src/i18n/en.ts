@@ -13,6 +13,16 @@ export const en: I18nKeys = {
     reset: 'Reset',
     undo: 'Undo',
     redo: 'Redo',
+    sectionTitle: 'Tools',
+    addLayerCaption: 'Pick a rock and deposit it',
+    stressCaption: 'Push, pull or shear',
+    faultCaption: 'Break and offset layers',
+    foldCaption: 'Bend layers into waves',
+    erodeCaption: 'Shave the top flat',
+    needLayer: 'Add a layer first',
+    previewHint: 'Move the sliders to preview the result live on the cross-section.',
+    resetConfirm: 'Click again to reset',
+    shortcutHint: 'Ctrl / ⌘ + Z to undo',
   },
 
   addLayerDialog: {
@@ -21,6 +31,7 @@ export const en: I18nKeys = {
     thickness: 'Thickness (px)',
     confirm: 'Add',
     cancel: 'Cancel',
+    environment: 'Environment',
   },
 
   stressDialog: {
@@ -29,6 +40,9 @@ export const en: I18nKeys = {
     extension: 'Horizontal Extension',
     shear: 'Shear',
     apply: 'Apply',
+    compressionCaption: 'Push from both sides',
+    extensionCaption: 'Pull apart',
+    shearCaption: 'Slide top and bottom apart',
     hint: 'Compression tends to form folds, extension forms normal faults, and shear forms strike-slip faults.',
   },
 
@@ -41,6 +55,9 @@ export const en: I18nKeys = {
     displacement: 'Displacement (px)',
     positionX: 'Fault position X (px)',
     apply: 'Apply',
+    normalCaption: 'Tension → hanging wall drops',
+    reverseCaption: 'Compression → hanging wall rises',
+    strikeSlipCaption: 'Shear → blocks slide sideways',
   },
 
   foldDialog: {
@@ -52,12 +69,18 @@ export const en: I18nKeys = {
     amplitude: 'Amplitude (px)',
     centerX: 'Center X (px)',
     apply: 'Apply',
+    anticlineCaption: 'Arches upward',
+    synclineCaption: 'Sags downward',
   },
 
   timeline: {
     title: 'Operation History',
     initial: 'Initial state',
     step: 'Step',
+    scrubber: 'Travel through time',
+    stepOf: (step: number, total: number) => `Step ${step} / ${total}`,
+    redoable: 'Can redo',
+    now: 'Now',
   },
 
   crossSection: {
@@ -69,6 +92,25 @@ export const en: I18nKeys = {
     labelSyncline: 'Syncline',
     labelUnconformity: 'Unconformity',
     empty: 'Add layers from the panel on the left',
+    preview: 'Preview',
+    previewHint: 'Apply to confirm',
+    erodePreview: 'Click to erode',
+    younger: 'Young',
+    older: 'Old',
+    emptyTitle: 'Build Earth\'s history, one layer at a time',
+    emptyBody: 'Deposit, push, break and erode. See with your own hands how faults and folds take shape.',
+    startSample: 'Start with sample layers',
+    startEmpty: 'Add my own layer',
+    ariaLabel: (layers: number, faults: number) => `Geological cross-section: ${layers} layer(s), ${faults} fault(s)`,
+    layerOrder: (n: number) => `Deposited #${n} from the bottom`,
+    unconformityNote: 'Top surface is an unconformity (erosion surface)',
+    anticlineAxis: 'Anticline axis',
+    synclineAxis: 'Syncline axis',
+    inspectHint: 'Hover or tap a layer to inspect it',
+    legend: 'Legend',
+    towardViewer: 'toward you',
+    awayFromViewer: 'away',
+    close: 'Close',
   },
 
   learning: {
@@ -82,6 +124,9 @@ export const en: I18nKeys = {
     answer: 'Answer: ',
     noContent: 'Add layers to see explanations.',
     quizScore: 'Score: ',
+    quizEmpty: 'Create folds, faults, erosion or stress to unlock quiz questions about them.',
+    quizLabel: 'Question',
+    keyTerms: ['law of superposition', 'unconformity', 'Strike-slip faults', 'Normal faults', 'Reverse faults', 'anticline', 'syncline', 'hanging wall', 'compression', 'tension', 'shear stress', 'erosion'],
   },
 
   quiz: {
@@ -106,5 +151,18 @@ export const en: I18nKeys = {
     darkMode: 'Dark',
     langJa: '日本語',
     langEn: 'English',
+    switchToLight: 'Switch to light mode',
+    switchToDark: 'Switch to dark mode',
+    switchLang: '日本語に切り替え',
+  },
+
+  missions: {
+    title: 'Missions',
+    lead: 'Master geological structures one by one as you build.',
+    progress: (done: number, total: number) => `${done} / ${total} done`,
+    achieved: 'Mission complete',
+    allDone: 'All missions complete!',
+    reset: 'Reset progress',
+    open: 'Open missions',
   },
 };

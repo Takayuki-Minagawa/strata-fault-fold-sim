@@ -1,24 +1,40 @@
 import { useState, useMemo } from 'react';
+import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { useGeoStore } from '../../store/useGeoStore';
+import { useProgressStore } from '../../store/useProgressStore';
 import { useI18n } from '../../i18n/useI18n';
 import type { HistoryEntry } from '../../types/geology';
+import {
+  AddLayerToolIcon, ArrowRightIcon, BookIcon, CheckIcon, CloseIcon, ErodeToolIcon, FaultToolIcon,
+  FoldToolIcon, InfoIcon, LockIcon, QuizIcon, SparkleIcon, StressToolIcon,
+} from '../icons';
 
 type Tab = 'description' | 'quiz';
 
 // ─── 解説文自動生成 ───────────────────────────────────────────────
 
+type DescriptionKind = 'intro' | 'layers' | 'erosion' | 'stress' | 'fold' | 'fault';
+
+interface DescriptionLine {
+  kind: DescriptionKind;
+  text: string;
+}
+
 function generateDescription(
   history: HistoryEntry[],
   currentStep: number,
   lang: 'ja' | 'en',
-): string[] {
-  const lines: string[] = [];
+): DescriptionLine[] {
+  const lines: DescriptionLine[] = [];
+  let kind: DescriptionKind = 'intro';
+  const push = (text: string) => lines.push({ kind, text });
   const active = history.slice(0, currentStep + 1);
 
   if (active.length === 0) {
-    return lang === 'ja'
+    return (lang === 'ja'
       ? ['地層を追加すると、地質断面の解説が表示されます。', '左のツールバーから「地層を追加」を押してみましょう。']
-      : ['Add layers to see geological cross-section explanations.', 'Click "Add Layer" in the toolbar on the left.'];
+      : ['Add layers to see geological cross-section explanations.', 'Click "Add Layer" in the toolbar on the left.']
+    ).map(text => ({ kind: 'intro', text }));
   }
 
   const layers   = active.filter((e: HistoryEntry) => e.action.type === 'ADD_LAYER');
@@ -29,55 +45,65 @@ function generateDescription(
 
   if (lang === 'ja') {
     if (layers.length > 0) {
-      lines.push(`現在 ${layers.length} 層の地層が形成されています。`);
-      lines.push('地層は下から順に堆積しており、上の地層ほど新しい（地層累重の法則）。');
+      kind = 'layers';
+      push(`現在 ${layers.length} 層の地層が形成されています。`);
+      push('地層は下から順に堆積しており、上の地層ほど新しい（地層累重の法則）。');
     }
     if (erodes.length > 0) {
-      lines.push(`${erodes.length} 回の削剥（侵食）が行われ、不整合面が形成されました。`);
-      lines.push('不整合面（波線）は地層の形成に時間的なギャップがあることを示します。');
+      kind = 'erosion';
+      push(`${erodes.length} 回の削剥（侵食）が行われ、不整合面が形成されました。`);
+      push('不整合面（波線）は地層の形成に時間的なギャップがあることを示します。');
     }
     if (stresses.length > 0) {
-      lines.push(`${stresses.length} 回の応力操作が加えられました。`);
+      kind = 'stress';
+      push(`${stresses.length} 回の応力操作が加えられました。`);
     }
     if (folds.length > 0) {
-      lines.push(`${folds.length} 箇所の褶曲構造が確認できます。`);
-      lines.push('山型の盛り上がりを背斜、谷型のくぼみを向斜と呼びます。');
+      kind = 'fold';
+      push(`${folds.length} 箇所の褶曲構造が確認できます。`);
+      push('山型の盛り上がりを背斜、谷型のくぼみを向斜と呼びます。');
     }
     if (faults.length > 0) {
-      lines.push(`${faults.length} 本の断層が形成されています。`);
+      kind = 'fault';
+      push(`${faults.length} 本の断層が形成されています。`);
       const types = faults.map((e: HistoryEntry) => (e.action as { type: 'APPLY_FAULT'; fault: { type: string } }).fault.type);
       if (types.includes('normal'))
-        lines.push('正断層は水平伸張（引っ張り）によって形成され、上盤が下方向にずれます。');
+        push('正断層は水平伸張（引っ張り）によって形成され、上盤が下方向にずれます。');
       if (types.includes('reverse'))
-        lines.push('逆断層は水平圧縮によって形成され、上盤が上方向にずれます。');
+        push('逆断層は水平圧縮によって形成され、上盤が上方向にずれます。');
       if (types.includes('strike-slip'))
-        lines.push('横ずれ断層はせん断応力によって形成され、水平方向にずれます。');
+        push('横ずれ断層はせん断応力によって形成され、水平方向にずれます。');
     }
   } else {
     if (layers.length > 0) {
-      lines.push(`${layers.length} layer(s) have been deposited.`);
-      lines.push('Layers are stacked in order — the upper layers are younger (law of superposition).');
+      kind = 'layers';
+      push(`${layers.length} layer(s) have been deposited.`);
+      push('Layers are stacked in order — the upper layers are younger (law of superposition).');
     }
     if (erodes.length > 0) {
-      lines.push(`${erodes.length} erosion event(s) created unconformity surface(s).`);
-      lines.push('An unconformity (wavy line) indicates a time gap in the geological record.');
+      kind = 'erosion';
+      push(`${erodes.length} erosion event(s) created unconformity surface(s).`);
+      push('An unconformity (wavy line) indicates a time gap in the geological record.');
     }
     if (stresses.length > 0) {
-      lines.push(`${stresses.length} stress event(s) have been applied.`);
+      kind = 'stress';
+      push(`${stresses.length} stress event(s) have been applied.`);
     }
     if (folds.length > 0) {
-      lines.push(`${folds.length} fold structure(s) are visible.`);
-      lines.push('An upward arch is called an anticline; a downward trough is a syncline.');
+      kind = 'fold';
+      push(`${folds.length} fold structure(s) are visible.`);
+      push('An upward arch is called an anticline; a downward trough is a syncline.');
     }
     if (faults.length > 0) {
-      lines.push(`${faults.length} fault(s) have formed.`);
+      kind = 'fault';
+      push(`${faults.length} fault(s) have formed.`);
       const types = faults.map((e: HistoryEntry) => (e.action as { type: 'APPLY_FAULT'; fault: { type: string } }).fault.type);
       if (types.includes('normal'))
-        lines.push('Normal faults form under tension — the hanging wall drops down.');
+        push('Normal faults form under tension — the hanging wall drops down.');
       if (types.includes('reverse'))
-        lines.push('Reverse faults form under compression — the hanging wall moves up.');
+        push('Reverse faults form under compression — the hanging wall moves up.');
       if (types.includes('strike-slip'))
-        lines.push('Strike-slip faults form under shear stress — blocks move horizontally.');
+        push('Strike-slip faults form under shear stress — blocks move horizontally.');
     }
   }
 
@@ -197,11 +223,36 @@ function generateQuiz(
   return questions;
 }
 
+// ─── 表示用の補助 ─────────────────────────────────────────────────
+
+const KIND_STYLE: Record<DescriptionKind, { icon: ComponentType<SVGProps<SVGSVGElement>>; tile: string }> = {
+  intro:   { icon: SparkleIcon,      tile: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300' },
+  layers:  { icon: AddLayerToolIcon, tile: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300' },
+  erosion: { icon: ErodeToolIcon,    tile: 'bg-sky-100 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300' },
+  stress:  { icon: StressToolIcon,   tile: 'bg-violet-100 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300' },
+  fold:    { icon: FoldToolIcon,     tile: 'bg-teal-100 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300' },
+  fault:   { icon: FaultToolIcon,    tile: 'bg-rose-100 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300' },
+};
+
+/** 文中の重要語句を強調する */
+function highlightTerms(text: string, terms: string[]): ReactNode {
+  if (terms.length === 0) return text;
+  const escaped = [...terms].sort((a, b) => b.length - a.length)
+    .map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const parts = text.split(new RegExp(`(${escaped.join('|')})`, 'g'));
+  return parts.map((part, i) =>
+    i % 2 === 1
+      ? <strong key={i} className="font-semibold text-stone-900 underline decoration-amber-400/70 decoration-2 underline-offset-2 dark:text-stone-50">{part}</strong>
+      : part,
+  );
+}
+
 // ─── コンポーネント ───────────────────────────────────────────────
 
 export function LearningPanel() {
   const { history, currentStep } = useGeoStore();
   const { t, lang } = useI18n();
+  const recordCorrect = useProgressStore(s => s.recordCorrect);
   const [tab, setTab] = useState<Tab>('description');
   const [quizIndex, setQuizIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -212,17 +263,33 @@ export function LearningPanel() {
     [history, currentStep, lang],
   );
 
+  // 同じ話題の文を 1 枚のカードにまとめる
+  const groups = useMemo(() => {
+    const result: { kind: DescriptionKind; lines: string[] }[] = [];
+    for (const line of description) {
+      const last = result[result.length - 1];
+      if (last && last.kind === line.kind) last.lines.push(line.text);
+      else result.push({ kind: line.kind, lines: [line.text] });
+    }
+    return result;
+  }, [description]);
+
   const quizzes = useMemo(
     () => generateQuiz(history, currentStep, lang),
     [history, currentStep, lang],
   );
 
-  const quiz = quizzes[quizIndex] ?? null;
+  // 元に戻す等で問題数が減っても範囲外にならないようにする
+  const currentIndex = quizzes.length > 0 ? quizIndex % quizzes.length : 0;
+  const quiz = quizzes[currentIndex] ?? null;
 
   const handleAnswer = (idx: number) => {
     if (selected !== null) return;
     setSelected(idx);
-    if (quiz && idx === quiz.answerIndex) setScore(s => s + 1);
+    if (quiz && idx === quiz.answerIndex) {
+      setScore(s => s + 1);
+      recordCorrect();
+    }
   };
 
   const nextQuiz = () => {
@@ -231,27 +298,33 @@ export function LearningPanel() {
   };
 
   const tabClass = (active: boolean) =>
-    `flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+    `flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg transition-all
+     focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-600 ${
       active
-        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+        ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm'
+        : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'
     }`;
 
+  const isCorrect = quiz !== null && selected === quiz.answerIndex;
+
   return (
-    <div className="flex flex-col h-full">
-      <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2 px-1">
+    <div className="flex h-full flex-col">
+      <h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
         {t.learning.title}
       </h2>
 
       {/* タブ */}
-      <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 mb-3">
-        <button className={tabClass(tab === 'description')} onClick={() => setTab('description')}>
-          {t.learning.description}
+      <div className="mb-3 flex rounded-xl bg-stone-100 p-1 dark:bg-stone-800" role="tablist">
+        <button role="tab" aria-selected={tab === 'description'} className={tabClass(tab === 'description')}
+          onClick={() => setTab('description')}>
+          <BookIcon className="text-sm" /> {t.learning.description}
         </button>
-        <button className={tabClass(tab === 'quiz')} onClick={() => setTab('quiz')}>
-          {t.learning.quiz}
+        <button role="tab" aria-selected={tab === 'quiz'} className={tabClass(tab === 'quiz')}
+          onClick={() => setTab('quiz')}>
+          <QuizIcon className="text-sm" /> {t.learning.quiz}
           {quizzes.length > 0 && (
-            <span className="ml-1 text-[10px] bg-blue-500 text-white rounded-full px-1.5">
+            <span key={quizzes.length}
+              className="animate-badge-glow grid h-4 min-w-4 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
               {quizzes.length}
             </span>
           )}
@@ -260,71 +333,110 @@ export function LearningPanel() {
 
       {/* 解説タブ */}
       {tab === 'description' && (
-        <div className="flex-1 overflow-y-auto space-y-2">
-          {description.map((line, i) => (
-            <p key={i} className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed
-                                  bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
-              {line}
-            </p>
-          ))}
+        <div className="flex-1 space-y-2 overflow-y-auto" role="tabpanel">
+          {groups.map((group, gi) => {
+            const style = KIND_STYLE[group.kind];
+            const Icon = style.icon;
+            return (
+              <article key={`${group.kind}-${gi}`}
+                className="animate-pop-in flex gap-3 rounded-2xl bg-white p-3 ring-1 ring-stone-900/5 dark:bg-stone-800/70 dark:ring-white/5"
+                style={{ animationDelay: `${gi * 50}ms` }}>
+                <span className={`grid size-9 shrink-0 place-items-center rounded-xl text-[26px] ${style.tile}`}>
+                  <Icon />
+                </span>
+                <div className="min-w-0 space-y-1">
+                  {group.lines.map((line, i) => (
+                    <p key={i} className={i === 0
+                      ? 'text-[13px] font-semibold leading-snug text-stone-800 dark:text-stone-100'
+                      : 'text-xs leading-relaxed text-stone-600 dark:text-stone-300'}>
+                      {highlightTerms(line, t.learning.keyTerms)}
+                    </p>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 
       {/* クイズタブ */}
       {tab === 'quiz' && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" role="tabpanel">
           {quizzes.length === 0 ? (
-            <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-8">
-              {t.learning.noContent}
-            </p>
+            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+              <span className="grid size-12 place-items-center rounded-2xl bg-stone-100 text-2xl text-stone-400 dark:bg-stone-800 dark:text-stone-500">
+                <LockIcon />
+              </span>
+              <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+                {history.length === 0 ? t.learning.noContent : t.learning.quizEmpty}
+              </p>
+            </div>
           ) : quiz ? (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-gray-400">
-                  {quizIndex + 1} / {quizzes.length}
-                </span>
-                <span className="text-[10px] text-blue-500">
-                  {t.learning.quizScore}{score}
+            <div key={`${currentIndex}-${quiz.question}`} className="animate-pop-in">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+                    {t.learning.quizLabel} {currentIndex + 1} / {quizzes.length}
+                  </span>
+                  <span className="flex gap-1" aria-hidden="true">
+                    {quizzes.map((_, i) => (
+                      <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIndex ? 'w-4 bg-amber-500' : 'w-1.5 bg-stone-300 dark:bg-stone-600'}`} />
+                    ))}
+                  </span>
+                </div>
+                <span className="flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 dark:bg-teal-400/10 dark:text-teal-300">
+                  <CheckIcon className="text-xs" /> {t.learning.quizScore}{score}
                 </span>
               </div>
-              <p className="text-xs font-medium text-gray-700 dark:text-gray-200 mb-3 leading-relaxed">
+              <p className="mb-3 text-sm font-bold leading-relaxed text-stone-800 dark:text-stone-100">
                 {quiz.question}
               </p>
               <div className="space-y-2">
                 {quiz.options.map((opt, i) => {
-                  let cls = 'w-full text-left px-3 py-2 rounded-lg text-xs border transition-colors ';
-                  if (selected === null) {
-                    cls += 'border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300';
-                  } else if (i === quiz.answerIndex) {
-                    cls += 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-semibold';
-                  } else if (i === selected) {
-                    cls += 'border-red-400 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400';
+                  const answered = selected !== null;
+                  const isAnswer = i === quiz.answerIndex;
+                  const isPicked = i === selected;
+                  let cls = 'flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-xs transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-600 ';
+                  if (!answered) {
+                    cls += 'border-stone-200 bg-white text-stone-700 hover:-translate-y-px hover:border-teal-400 hover:shadow-sm dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:border-teal-500';
+                  } else if (isAnswer) {
+                    cls += `border-emerald-500 bg-emerald-50 font-semibold text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300 ${isPicked ? 'animate-correct' : ''}`;
+                  } else if (isPicked) {
+                    cls += 'animate-shake border-rose-400 bg-rose-50 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300';
                   } else {
-                    cls += 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500 opacity-60';
+                    cls += 'border-stone-200 bg-white text-stone-400 opacity-60 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-500';
                   }
                   return (
-                    <button key={i} className={cls} onClick={() => handleAnswer(i)}>
+                    <button key={i} type="button" className={cls} onClick={() => handleAnswer(i)}
+                      aria-disabled={answered}>
+                      <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${
+                        answered && isAnswer ? 'bg-emerald-500 text-white'
+                        : answered && isPicked ? 'bg-rose-500 text-white'
+                        : 'bg-stone-100 text-stone-500 dark:bg-stone-700 dark:text-stone-300'}`}>
+                        {answered && isAnswer ? <CheckIcon /> : answered && isPicked ? <CloseIcon /> : String.fromCharCode(65 + i)}
+                      </span>
                       {opt}
                     </button>
                   );
                 })}
               </div>
               {selected !== null && (
-                <div className="mt-3 space-y-2">
-                  <p className={`text-xs font-semibold ${
-                    selected === quiz.answerIndex
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-500 dark:text-red-400'
+                <div className="animate-pop-in mt-3 space-y-2" aria-live="polite">
+                  <p className={`flex items-center gap-1.5 text-sm font-bold ${
+                    isCorrect ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'
                   }`}>
-                    {selected === quiz.answerIndex ? t.learning.correct : t.learning.incorrect}
+                    {isCorrect ? <SparkleIcon /> : <InfoIcon />}
+                    {isCorrect ? t.learning.correct : t.learning.incorrect}
                   </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 leading-relaxed">
-                    {quiz.explanation}
+                  <p className="flex gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-stone-700 dark:bg-amber-400/10 dark:text-stone-200">
+                    <BookIcon className="mt-0.5 shrink-0 text-sm text-amber-600 dark:text-amber-400" />
+                    <span>{highlightTerms(quiz.explanation, t.learning.keyTerms)}</span>
                   </p>
                   <button
+                    type="button"
                     onClick={nextQuiz}
-                    className="w-full py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium transition-colors">
-                    {t.learning.nextQuiz} →
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-stone-900 py-2.5 text-xs font-semibold text-white transition-all hover:bg-stone-800 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:bg-amber-400 dark:text-stone-900 dark:hover:bg-amber-300">
+                    {t.learning.nextQuiz} <ArrowRightIcon />
                   </button>
                 </div>
               )}
