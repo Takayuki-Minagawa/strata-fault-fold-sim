@@ -9,8 +9,10 @@ export interface Point {
 /** 地層一枚（多角形） */
 export interface Layer {
   id: string;
-  /** 多角形の頂点座標（左→右の順、上面→下面の順） */
+  /** 多角形の頂点座標（上面を左→右、続けて下面を右→左の順） */
   vertices: Point[];
+  /** vertices のうち上面に属する頂点数（省略時は 2 = 旧来の矩形） */
+  topCount?: number;
   rockId: RockId;
   /** 堆積順（1 が最初） */
   order: number;
