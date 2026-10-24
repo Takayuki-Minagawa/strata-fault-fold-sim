@@ -60,6 +60,15 @@ function labelPosition(layer: Layer, faults: FaultLine[], width: number, height:
   return best && best.thick >= minThick && best.score > -500 ? best : null;
 }
 
+/** キーボード操作によるフォーカスか（マウス・タップでは枠や詳細を出さない） */
+function isKeyboardFocus(el: Element): boolean {
+  try {
+    return el.matches(':focus-visible');
+  } catch {
+    return true;
+  }
+}
+
 const FAULT_COLOR: Record<FaultLine['type'], string> = {
   normal: '#2563eb',
   reverse: '#e11d48',
@@ -87,7 +96,11 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   // 選んだ地層は「どの状態で選んだか」とともに記録し、元に戻す等で状態が変わったら解除する
   const [hovered, setHovered] = useState<{ idx: number; at: GeoState } | null>(null);
   const [pinned, setPinned] = useState<{ idx: number; at: GeoState } | null>(null);
-  const [focused, setFocused] = useState<{ idx: number; at: GeoState } | null>(null);
+  // キーボードでフォーカスしている地層の番号（マウス・タップでのフォーカスは記録しない）。
+  // 元に戻す等で状態が変わってもフォーカスは同じ要素に残るので、状態には紐付けない
+  const [focused, setFocused] = useState<number | null>(null);
+  // 最後にフォーカスしていた地層。その層が消えてフォーカスが失われたときに近くの層へ戻すため
+  const lastFocusRef = useRef<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const keyboardHintId = useId();
@@ -127,7 +140,7 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
 
   const pinnedIdx = pinned?.at === geoState ? pinned.idx : null;
   const hoveredIdx = hovered?.at === geoState ? hovered.idx : null;
-  const focusedIdx = focused?.at === geoState ? focused.idx : null;
+  const focusedIdx = focused !== null && focused < baseCount ? focused : null;
   const activeIdx = preview ? null : (pinnedIdx ?? focusedIdx ?? hoveredIdx);
   // キーボードでは地層を 1 つの Tab 位置にまとめ、矢印キーで層を移動する（ロービングタブインデックス）
   // （マウスのホバーでは動かさない）
@@ -150,6 +163,19 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
     svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${idx}"]`)?.focus();
   };
 
+  // フォーカス中の地層が元に戻す・削剥などで消えたら、近くの地層（なければ断面図）へフォーカスを戻す
+  useEffect(() => {
+    const last = lastFocusRef.current;
+    if (last === null) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    if (baseCount > 0) {
+      svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${Math.min(last, baseCount - 1)}"]`)?.focus();
+    } else {
+      svgRef.current?.focus();
+    }
+  }, [geoState, baseCount]);
+
   // ↑→ で上（新しい層）、↓← で下（古い層）、Home / End で最古 / 最新、Enter / Space で固定
   const handleLayerKey = (e: KeyboardEvent<SVGGElement>, idx: number) => {
     const last = layers.length - 1;
@@ -167,6 +193,8 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
       e.preventDefault();
       togglePin(idx);
     } else if (e.key === 'Escape') {
+      // ツールパネルを閉じる全体のショートカットには渡さない
+      e.stopPropagation();
       setPinned(null);
     }
   };
@@ -226,8 +254,10 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
     const patternId = rock.pattern !== 'none' ? rock.pattern : undefined;
     const isNew = isAddPreview && idx >= baseCount;
     const isActive = activeIdx === idx;
-    const isFocused = !preview && focusedIdx === idx;
-    const interactive = !preview && idx < baseCount;
+    const isFocused = focusedIdx === idx;
+    // プレビューで追加される層以外は常にフォーカス可能にしておく（プレビュー中に tabindex を
+    // 外すとフォーカスが失われるため）。Tab で入れる位置はプレビュー中はなし
+    const interactive = idx < baseCount;
     const opacity = effectiveHighlight !== null && effectiveHighlight !== layer.rockId ? 0.22 : 1;
     const label = labelPosition(layer, faults, width, height, fs * 1.4);
 
@@ -237,7 +267,7 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
           style={{ cursor: preview ? undefined : 'pointer' }}
           data-layer-index={idx}
           role={interactive ? 'button' : undefined}
-          tabIndex={interactive ? (idx === tabStopIdx ? 0 : -1) : undefined}
+          tabIndex={interactive ? (!preview && idx === tabStopIdx ? 0 : -1) : undefined}
           aria-pressed={interactive ? pinnedIdx === idx : undefined}
           aria-label={interactive
             ? `${rockName(layer.rockId)} — ${t.crossSection.layerOrder(layer.order)}${
@@ -246,9 +276,16 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
           aria-describedby={interactive ? keyboardHintId : undefined}
           onPointerEnter={() => setHovered({ idx, at: geoState })}
           onPointerLeave={() => setHovered(h => (h?.idx === idx ? null : h))}
-          onFocus={() => setFocused({ idx, at: geoState })}
-          onBlur={() => setFocused(f => (f?.idx === idx ? null : f))}
-          onKeyDown={interactive ? e => handleLayerKey(e, idx) : undefined}
+          onFocus={e => {
+            lastFocusRef.current = idx;
+            if (isKeyboardFocus(e.currentTarget)) setFocused(idx);
+          }}
+          onBlur={e => {
+            setFocused(f => (f === idx ? null : f));
+            // 別の要素へ移ったときだけ記録を消す（要素ごと消えた場合は relatedTarget が null）
+            if (e.relatedTarget !== null) lastFocusRef.current = null;
+          }}
+          onKeyDown={interactive && !preview ? e => handleLayerKey(e, idx) : undefined}
           onClick={e => {
             e.stopPropagation();
             if (!preview) togglePin(idx);
@@ -408,6 +445,7 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
       <span id={keyboardHintId} className="sr-only">{t.crossSection.keyboardHint}</span>
       <svg
         ref={svgRef}
+        tabIndex={-1}
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
         role="group"
