@@ -330,12 +330,14 @@ export function LearningPanel() {
 
       {/* タブ */}
       <div className="mb-3 flex rounded-xl bg-stone-100 p-1 dark:bg-stone-800" role="tablist">
-        <button role="tab" id="learning-tab-description" aria-controls="learning-panel-description"
+        <button role="tab" id="learning-tab-description"
+          aria-controls={tab === 'description' ? 'learning-panel-description' : undefined}
           aria-selected={tab === 'description'} className={tabClass(tab === 'description')}
           onClick={() => setTab('description')}>
           <BookIcon className="text-sm" /> {t.learning.description}
         </button>
-        <button role="tab" id="learning-tab-quiz" aria-controls="learning-panel-quiz"
+        <button role="tab" id="learning-tab-quiz"
+          aria-controls={tab === 'quiz' ? 'learning-panel-quiz' : undefined}
           aria-selected={tab === 'quiz'} className={tabClass(tab === 'quiz')}
           onClick={() => setTab('quiz')}>
           <QuizIcon className="text-sm" /> {t.learning.quiz}

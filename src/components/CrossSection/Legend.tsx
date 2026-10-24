@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useGeoStore } from '../../store/useGeoStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useI18n } from '../../i18n/useI18n';
@@ -21,6 +22,12 @@ export function Legend() {
   const rocks = [...new Set(geoState.layers.map(l => l.rockId))];
   const faultTypes = [...new Set(geoState.faults.map(f => f.type))];
   const hasUnconformity = geoState.layers.some(l => l.unconformityAbove);
+
+  // 強調中の岩相が元に戻す等で消えたら強調を解除する（チップが消えると blur が届かないため）
+  const highlightGone = highlightRock !== null && !rocks.includes(highlightRock);
+  useEffect(() => {
+    if (highlightGone) setHighlightRock(null);
+  }, [highlightGone, setHighlightRock]);
 
   if (rocks.length === 0) return null;
 

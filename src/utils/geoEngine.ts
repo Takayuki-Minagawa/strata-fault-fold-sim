@@ -108,14 +108,21 @@ export function addLayer(state: GeoState, action: AddLayerAction): GeoState {
   const tops = layers.map(l => layerEdges(l).top);
   const surfaceAt = surfaceFinder(tops, viewHeight);
 
-  // 下面は等間隔の点に加えて既存の上面の頂点位置でも地表をなぞり、
-  // 断層の段差や層どうしの交点は細分化して角を正確に埋める
+  // 下面は等間隔の点に加えて、地表に出ている上面の頂点位置でも地表をなぞる
+  // （埋もれた頂点は使わず、頂点数が層の数に比例して増えないようにする）。
+  // 断層の段差や層どうしの交点は refine で細分化して角を正確に埋める
   const minX = xs[0];
   const maxX = xs[xs.length - 1];
-  const baseXs = [...new Set([
-    ...xs,
-    ...tops.flatMap(top => top.map(p => p.x)).filter(x => x > minX && x < maxX),
-  ])].sort((a, b) => a - b);
+  const highestAt = new Map<number, number>();
+  for (const top of tops) {
+    for (const p of top) {
+      if (p.x <= minX || p.x >= maxX) continue;
+      const y = highestAt.get(p.x);
+      if (y === undefined || p.y < y) highestAt.set(p.x, p.y);
+    }
+  }
+  const exposedXs = [...highestAt].filter(([x, y]) => surfaceAt(x) >= y - 1e-6).map(([x]) => x);
+  const baseXs = [...new Set([...xs, ...exposedXs])].sort((a, b) => a - b);
   const baseSurface: Point[] = [];
   /** 2 点間で地表が折れ曲がっていれば中点を足して細分化する（層どうしの交点など） */
   const refine = (a: Point, b: Point, depth: number) => {
@@ -257,7 +264,8 @@ export function applyFault(state: GeoState, action: ApplyFaultAction): GeoState 
       if (len < FAULT_EPS * 4) continue;
       const t = sa / (sa - sb);
       const te = FAULT_EPS / len;
-      for (const tt of [t - te, t + te]) {
+      // 端点が断層線上にあるとき（t = 0 / 1）に線分の外へはみ出さないようにする
+      for (const tt of [Math.max(t - te, 0), Math.min(t + te, 1)]) {
         out.push({ x: a.x + (b.x - a.x) * tt, y: a.y + (b.y - a.y) * tt });
       }
     }

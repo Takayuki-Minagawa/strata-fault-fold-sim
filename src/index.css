@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* 断面図を上部に固定してもパネルを操作できる高さがある 1 カラム表示（縦向きのスマホなど） */
-@custom-variant pin-preview (@media (max-width: 767.98px) and (min-height: 640px));
+@custom-variant pin-preview (@media (max-width: 767.98px) and (min-height: 640px) and (orientation: portrait));
 
 @theme {
   --font-sans: system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
