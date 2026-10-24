@@ -464,6 +464,11 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
       <svg
         ref={svgRef}
         tabIndex={-1}
+        // 地層が 1 枚もなくなって断面図自体にフォーカスが移ったら、地層のフォーカス状態を消す
+        // （フォーカス中の要素が消えても blur は届かないため）
+        onFocus={e => {
+          if (e.target === e.currentTarget) setFocused(null);
+        }}
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
         role="group"
