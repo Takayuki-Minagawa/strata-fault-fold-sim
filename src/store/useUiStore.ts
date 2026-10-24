@@ -39,7 +39,8 @@ export const useUiStore = create<UiStore>((set) => ({
     set({ draft });
   },
   setErodePreview(on) {
-    set({ erodePreview: on });
+    // カーソル移動のたびに呼ばれるので、値が変わるときだけ更新する
+    set(state => (state.erodePreview === on ? state : { erodePreview: on }));
   },
   setHighlightRock(rock) {
     set({ highlightRock: rock });

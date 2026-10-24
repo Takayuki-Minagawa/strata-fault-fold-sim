@@ -66,8 +66,8 @@ export default function App() {
         {/* 断面ビュー（スマホでは操作パネルを開いている間、上部に固定してプレビューを見やすくする） */}
         <section id="cross-section" aria-label={t.crossSection.title}
           className={`order-1 scroll-mt-[4.2rem] md:col-start-2 md:row-start-1 ${
-            openPanel ? 'max-md:sticky max-md:top-[3.6rem] max-md:z-30' : ''}`}>
-          <div className={`${card} space-y-2 ${openPanel ? 'max-md:shadow-xl' : ''}`}>
+            openPanel ? 'pin-preview:sticky pin-preview:top-[3.6rem] pin-preview:z-30' : ''}`}>
+          <div className={`${card} space-y-2 ${openPanel ? 'pin-preview:shadow-xl' : ''}`}>
             <SectionHeader />
             <CrossSectionView width={800} height={500} />
           </div>

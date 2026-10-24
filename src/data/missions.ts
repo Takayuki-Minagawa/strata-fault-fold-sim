@@ -4,7 +4,7 @@ import type { GeoAction } from '../types/geology';
 export interface MissionContext {
   /** 現在表示中のステップまでの操作 */
   actions: GeoAction[];
-  /** これまでのクイズ正解数 */
+  /** これまでに正解したクイズの種類数 */
   quizCorrect: number;
 }
 
@@ -95,10 +95,10 @@ export const MISSIONS: Mission[] = [
   },
   {
     id: 'quiz',
-    titleJa: 'クイズに 3 問正解する',
-    titleEn: 'Answer 3 quiz questions correctly',
-    hintJa: '構造をつくると学習パネルにクイズが出題される。',
-    hintEn: 'Build structures to unlock quiz questions.',
+    titleJa: 'クイズで 3 種類の問題に正解する',
+    titleEn: 'Correctly answer 3 different quiz questions',
+    hintJa: '構造をつくると学習パネルにクイズが出題される。いろいろな構造をつくろう。',
+    hintEn: 'Build different structures to unlock more quiz questions.',
     check: ({ quizCorrect }) => quizCorrect >= 3,
   },
 ];

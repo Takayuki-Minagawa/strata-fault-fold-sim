@@ -8,7 +8,8 @@ const STORAGE_KEY = 'strata-sim:progress:v1';
 
 interface SavedProgress {
   achieved: MissionId[];
-  quizCorrect: number;
+  /** 正解したクイズの id（同じ問題は 1 回だけ数える） */
+  correctQuizIds: string[];
 }
 
 export interface Toast {
@@ -19,8 +20,8 @@ export interface Toast {
 interface ProgressStore {
   /** 達成済みミッション（一度達成したら保持する） */
   achieved: MissionId[];
-  /** クイズの累計正解数 */
-  quizCorrect: number;
+  /** 正解したクイズの id */
+  correctQuizIds: string[];
   /** 達成通知 */
   toasts: Toast[];
   /** 最後に評価した操作列（クイズ正解時の再評価用） */
@@ -28,23 +29,25 @@ interface ProgressStore {
 
   /** 現在の操作列でミッション達成を判定する */
   evaluate: (actions: GeoAction[]) => void;
-  recordCorrect: () => void;
+  recordCorrect: (quizId: string) => void;
   dismissToasts: () => void;
   resetProgress: () => void;
 }
 
 function loadProgress(): SavedProgress {
   const raw = loadItem(STORAGE_KEY);
-  if (!raw) return { achieved: [], quizCorrect: 0 };
+  if (!raw) return { achieved: [], correctQuizIds: [] };
   try {
     const parsed = JSON.parse(raw) as Partial<SavedProgress>;
     const known = new Set(MISSIONS.map(m => m.id));
     return {
       achieved: (parsed.achieved ?? []).filter((id): id is MissionId => known.has(id)),
-      quizCorrect: typeof parsed.quizCorrect === 'number' ? parsed.quizCorrect : 0,
+      correctQuizIds: Array.isArray(parsed.correctQuizIds)
+        ? parsed.correctQuizIds.filter((id): id is string => typeof id === 'string')
+        : [],
     };
   } catch {
-    return { achieved: [], quizCorrect: 0 };
+    return { achieved: [], correctQuizIds: [] };
   }
 }
 
@@ -60,8 +63,8 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
   lastActions: [],
 
   evaluate(actions) {
-    const { achieved, quizCorrect, toasts } = get();
-    const ctx = { actions, quizCorrect };
+    const { achieved, correctQuizIds, toasts } = get();
+    const ctx = { actions, quizCorrect: correctQuizIds.length };
     const newly = MISSIONS
       .filter(m => !achieved.includes(m.id) && m.check(ctx))
       .map(m => m.id);
@@ -70,7 +73,7 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
       return;
     }
     const nextAchieved = [...achieved, ...newly];
-    persist({ achieved: nextAchieved, quizCorrect });
+    persist({ achieved: nextAchieved, correctQuizIds });
     set({
       achieved: nextAchieved,
       lastActions: actions,
@@ -78,11 +81,12 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
     });
   },
 
-  recordCorrect() {
-    const { achieved, quizCorrect } = get();
-    const next = quizCorrect + 1;
-    persist({ achieved, quizCorrect: next });
-    set({ quizCorrect: next });
+  recordCorrect(quizId) {
+    const { achieved, correctQuizIds } = get();
+    if (correctQuizIds.includes(quizId)) return;
+    const next = [...correctQuizIds, quizId];
+    persist({ achieved, correctQuizIds: next });
+    set({ correctQuizIds: next });
     get().evaluate(get().lastActions);
   },
 
@@ -91,7 +95,7 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
   },
 
   resetProgress() {
-    persist({ achieved: [], quizCorrect: 0 });
-    set({ achieved: [], quizCorrect: 0, toasts: [] });
+    persist({ achieved: [], correctQuizIds: [] });
+    set({ achieved: [], correctQuizIds: [], toasts: [] });
   },
 }));

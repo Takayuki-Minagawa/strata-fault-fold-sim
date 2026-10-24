@@ -44,7 +44,7 @@ export function Timeline() {
     const list = listRef.current;
     const item = list?.querySelector<HTMLElement>('[aria-current="step"]');
     if (!list || !item) return;
-    const top = item.offsetTop - list.offsetTop;
+    const top = item.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
     if (top < list.scrollTop || top + item.offsetHeight > list.scrollTop + list.clientHeight) {
       list.scrollTo({ top: top - list.clientHeight / 2 + item.offsetHeight / 2, behavior: 'smooth' });
     }
@@ -58,9 +58,9 @@ export function Timeline() {
         </h2>
         <span className="text-[11px] text-stone-400 dark:text-stone-500">{t.toolbar.shortcutHint}</span>
       </div>
-      <ol ref={listRef} className="relative max-h-80 flex-1 overflow-y-auto pr-1">
-        {/* 縦のつなぎ線 */}
-        <span className="absolute bottom-4 left-[1.375rem] top-4 w-px bg-stone-200 dark:bg-stone-700" aria-hidden="true" />
+      {/* before 疑似要素で縦のつなぎ線を描く */}
+      <ol ref={listRef}
+        className="relative max-h-80 flex-1 overflow-y-auto pr-1 before:absolute before:bottom-4 before:left-[1.375rem] before:top-4 before:w-px before:bg-stone-200 before:content-[''] dark:before:bg-stone-700">
         <TimelineItem
           label={t.timeline.initial}
           badge={<ActionBadge action={null} />}

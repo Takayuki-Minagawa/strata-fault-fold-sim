@@ -54,7 +54,9 @@ export function Legend() {
           {faultLabel(type)}
           {type === 'strike-slip' && (
             <span className="text-stone-500 dark:text-stone-400">
-              （⊙ {t.crossSection.towardViewer} / ⊗ {t.crossSection.awayFromViewer}）
+              {lang === 'ja'
+                ? `（⊙ ${t.crossSection.towardViewer} / ⊗ ${t.crossSection.awayFromViewer}）`
+                : `(⊙ ${t.crossSection.towardViewer} / ⊗ ${t.crossSection.awayFromViewer})`}
             </span>
           )}
         </span>

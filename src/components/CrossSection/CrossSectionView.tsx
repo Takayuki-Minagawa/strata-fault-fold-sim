@@ -5,7 +5,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useI18n } from '../../i18n/useI18n';
 import { ROCKS } from '../../data/rocks';
 import type { RockId } from '../../data/rocks';
-import type { FaultLine, GeoAction, Layer, Point } from '../../types/geology';
+import type { FaultLine, GeoAction, GeoState, Layer, Point } from '../../types/geology';
 import { applyAction, layerEdges, polylineYAt } from '../../utils/geoEngine';
 import { RockSwatch } from '../RockSwatch';
 import { CloseIcon, LayersIcon, SparkleIcon } from '../icons';
@@ -83,8 +83,9 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   const { draft, erodePreview, highlightRock, setOpenPanel } = useUiStore();
   const { theme } = useTheme();
   const { t, lang } = useI18n();
-  const [hovered, setHovered] = useState<number | null>(null);
-  const [pinned, setPinned] = useState<number | null>(null);
+  // 選んだ地層は「どの状態で選んだか」とともに記録し、元に戻す等で状態が変わったら解除する
+  const [hovered, setHovered] = useState<{ idx: number; at: GeoState } | null>(null);
+  const [pinned, setPinned] = useState<{ idx: number; at: GeoState } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // 画面が狭いと SVG が縮小されて文字が小さくなるので、文字・線を拡大して読みやすさを保つ
   const [scale, setScale] = useState(1);
@@ -120,7 +121,12 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   const isAddPreview = preview?.type === 'ADD_LAYER';
   const showGhost = preview !== null && !isAddPreview && baseCount > 0;
 
-  const activeIdx = preview ? null : (pinned ?? hovered);
+  const pinnedIdx = pinned?.at === geoState ? pinned.idx : null;
+  const hoveredIdx = hovered?.at === geoState ? hovered.idx : null;
+  const activeIdx = preview ? null : (pinnedIdx ?? hoveredIdx);
+  // 凡例で強調中の岩相が断面から消えた場合（元に戻す等）は強調しない
+  const effectiveHighlight = highlightRock !== null && layers.some(l => l.rockId === highlightRock)
+    ? highlightRock : null;
   const activeLayer = activeIdx !== null ? layers[activeIdx] : undefined;
 
   // 画面内に見えている範囲での地表の最高点
@@ -184,18 +190,18 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
     const patternId = rock.pattern !== 'none' ? rock.pattern : undefined;
     const isNew = isAddPreview && idx >= baseCount;
     const isActive = activeIdx === idx;
-    const opacity = highlightRock !== null && highlightRock !== layer.rockId ? 0.22 : 1;
+    const opacity = effectiveHighlight !== null && effectiveHighlight !== layer.rockId ? 0.22 : 1;
     const label = labelPosition(layer, faults, width, height, fs * 1.4);
 
     return (
       <g key={idx} className="layer-enter">
         <g className={isNew ? 'preview-layer' : undefined}
           style={{ cursor: preview ? undefined : 'pointer' }}
-          onPointerEnter={() => setHovered(idx)}
-          onPointerLeave={() => setHovered(h => (h === idx ? null : h))}
+          onPointerEnter={() => setHovered({ idx, at: geoState })}
+          onPointerLeave={() => setHovered(h => (h?.idx === idx ? null : h))}
           onClick={e => {
             e.stopPropagation();
-            if (!preview) setPinned(p => (p === idx ? null : idx));
+            if (!preview) setPinned(p => (p?.idx === idx && p.at === geoState ? null : { idx, at: geoState }));
           }}>
           <title>{`${rockName(layer.rockId)} — ${t.crossSection.layerOrder(layer.order)}`}</title>
           {/* 岩相色 */}
@@ -411,7 +417,7 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
                 {t.crossSection.layerOrder(activeLayer.order)}
               </p>
             </div>
-            {pinned !== null && (
+            {pinnedIdx !== null && (
               <button type="button" onClick={() => setPinned(null)} aria-label={t.crossSection.close}
                 className="pointer-events-auto -mr-1 -mt-1 grid size-6 place-items-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-stone-700">
                 <CloseIcon className="text-sm" />

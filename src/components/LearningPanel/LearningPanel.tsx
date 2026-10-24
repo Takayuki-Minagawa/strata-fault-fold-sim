@@ -113,6 +113,8 @@ function generateDescription(
 // ─── クイズ生成 ───────────────────────────────────────────────────
 
 interface QuizQuestion {
+  /** 言語によらない問題の識別子（ミッションの正解数を重複なく数えるため） */
+  id: string;
   question: string;
   options: string[];
   answerIndex: number;
@@ -135,6 +137,7 @@ function generateQuiz(
   if (lang === 'ja') {
     if (hasFold) {
       questions.push({
+        id: 'fold-name',
         question: '山型に盛り上がった褶曲構造の名称は？',
         options: ['背斜', '向斜', '正断層', '逆断層'],
         answerIndex: 0,
@@ -148,6 +151,7 @@ function generateQuiz(
         : 'normal';
       if (fType === 'normal') {
         questions.push({
+          id: 'fault-normal',
           question: '上盤が下方にずれる断層の種類は？',
           options: ['正断層', '逆断層', '横ずれ断層', '背斜'],
           answerIndex: 0,
@@ -155,6 +159,7 @@ function generateQuiz(
         });
       } else if (fType === 'reverse') {
         questions.push({
+          id: 'fault-reverse',
           question: '水平圧縮によって形成される断層の種類は？',
           options: ['正断層', '逆断層', '横ずれ断層', '向斜'],
           answerIndex: 1,
@@ -162,6 +167,7 @@ function generateQuiz(
         });
       } else {
         questions.push({
+          id: 'fault-strike-slip',
           question: 'せん断応力によって形成される断層は？',
           options: ['正断層', '逆断層', '横ずれ断層', '背斜'],
           answerIndex: 2,
@@ -171,6 +177,7 @@ function generateQuiz(
     }
     if (hasErode) {
       questions.push({
+        id: 'unconformity',
         question: '地層の形成に時間的なギャップがあることを示す境界面は？',
         options: ['整合面', '不整合面', '断層面', '褶曲軸面'],
         answerIndex: 1,
@@ -179,6 +186,7 @@ function generateQuiz(
     }
     if (hasStress) {
       questions.push({
+        id: 'stress-fold',
         question: '褶曲を形成する主な応力の方向は？',
         options: ['水平圧縮', '水平伸張', 'せん断', '垂直荷重'],
         answerIndex: 0,
@@ -188,6 +196,7 @@ function generateQuiz(
   } else {
     if (hasFold) {
       questions.push({
+        id: 'fold-name',
         question: 'What is the name of an arch-shaped fold structure?',
         options: ['Anticline', 'Syncline', 'Normal fault', 'Reverse fault'],
         answerIndex: 0,
@@ -196,6 +205,7 @@ function generateQuiz(
     }
     if (hasFault) {
       questions.push({
+        id: 'fault-normal',
         question: 'Which fault type is formed by horizontal tension?',
         options: ['Normal fault', 'Reverse fault', 'Strike-slip fault', 'Anticline'],
         answerIndex: 0,
@@ -204,6 +214,7 @@ function generateQuiz(
     }
     if (hasErode) {
       questions.push({
+        id: 'unconformity',
         question: 'What surface indicates a time gap in the geological record?',
         options: ['Conformity', 'Unconformity', 'Fault plane', 'Axial plane'],
         answerIndex: 1,
@@ -212,6 +223,7 @@ function generateQuiz(
     }
     if (hasStress) {
       questions.push({
+        id: 'stress-fold',
         question: 'What stress direction mainly causes folding?',
         options: ['Horizontal compression', 'Horizontal extension', 'Shear', 'Vertical load'],
         answerIndex: 0,
@@ -255,7 +267,8 @@ export function LearningPanel() {
   const recordCorrect = useProgressStore(s => s.recordCorrect);
   const [tab, setTab] = useState<Tab>('description');
   const [quizIndex, setQuizIndex] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
+  // 回答は問題ごとに記録し、問題が入れ替わったら未回答に戻す
+  const [answer, setAnswer] = useState<{ key: string; index: number } | null>(null);
   const [score, setScore] = useState(0);
 
   const description = useMemo(
@@ -282,18 +295,20 @@ export function LearningPanel() {
   // 元に戻す等で問題数が減っても範囲外にならないようにする
   const currentIndex = quizzes.length > 0 ? quizIndex % quizzes.length : 0;
   const quiz = quizzes[currentIndex] ?? null;
+  const quizKey = quiz ? `${currentIndex}:${quiz.id}` : '';
+  const selected = answer && answer.key === quizKey ? answer.index : null;
 
   const handleAnswer = (idx: number) => {
-    if (selected !== null) return;
-    setSelected(idx);
+    if (selected !== null || !quiz) return;
+    setAnswer({ key: quizKey, index: idx });
     if (quiz && idx === quiz.answerIndex) {
       setScore(s => s + 1);
-      recordCorrect();
+      recordCorrect(quiz.id);
     }
   };
 
   const nextQuiz = () => {
-    setSelected(null);
+    setAnswer(null);
     setQuizIndex(i => (i + 1) % (quizzes.length || 1));
   };
 
@@ -315,11 +330,13 @@ export function LearningPanel() {
 
       {/* タブ */}
       <div className="mb-3 flex rounded-xl bg-stone-100 p-1 dark:bg-stone-800" role="tablist">
-        <button role="tab" aria-selected={tab === 'description'} className={tabClass(tab === 'description')}
+        <button role="tab" id="learning-tab-description" aria-controls="learning-panel-description"
+          aria-selected={tab === 'description'} className={tabClass(tab === 'description')}
           onClick={() => setTab('description')}>
           <BookIcon className="text-sm" /> {t.learning.description}
         </button>
-        <button role="tab" aria-selected={tab === 'quiz'} className={tabClass(tab === 'quiz')}
+        <button role="tab" id="learning-tab-quiz" aria-controls="learning-panel-quiz"
+          aria-selected={tab === 'quiz'} className={tabClass(tab === 'quiz')}
           onClick={() => setTab('quiz')}>
           <QuizIcon className="text-sm" /> {t.learning.quiz}
           {quizzes.length > 0 && (
@@ -333,7 +350,8 @@ export function LearningPanel() {
 
       {/* 解説タブ */}
       {tab === 'description' && (
-        <div className="flex-1 space-y-2 overflow-y-auto" role="tabpanel">
+        <div className="flex-1 space-y-2 overflow-y-auto" role="tabpanel"
+          id="learning-panel-description" aria-labelledby="learning-tab-description">
           {groups.map((group, gi) => {
             const style = KIND_STYLE[group.kind];
             const Icon = style.icon;
@@ -361,7 +379,8 @@ export function LearningPanel() {
 
       {/* クイズタブ */}
       {tab === 'quiz' && (
-        <div className="flex-1 overflow-y-auto" role="tabpanel">
+        <div className="flex-1 overflow-y-auto" role="tabpanel"
+          id="learning-panel-quiz" aria-labelledby="learning-tab-quiz">
           {quizzes.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
               <span className="grid size-12 place-items-center rounded-2xl bg-stone-100 text-2xl text-stone-400 dark:bg-stone-800 dark:text-stone-500">

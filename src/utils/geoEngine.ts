@@ -43,19 +43,52 @@ export function layerEdges(layer: Layer): { top: Point[]; bottom: Point[] } {
   return { top: layer.vertices.slice(0, n), bottom: layer.vertices.slice(n) };
 }
 
+/** 線分 a-b 上の x における y。範囲外なら null（垂直な線分は高い方） */
+function segmentYAt(a: Point, b: Point, x: number): number | null {
+  const lo = Math.min(a.x, b.x);
+  const hi = Math.max(a.x, b.x);
+  if (x < lo || x > hi) return null;
+  return hi === lo ? Math.min(a.y, b.y) : a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x);
+}
+
 /** 折れ線上の x における最も高い位置（最小 y）を返す。範囲外なら null */
 export function polylineYAt(line: Point[], x: number): number | null {
   let best: number | null = null;
   for (let i = 0; i < line.length - 1; i++) {
-    const a = line[i];
-    const b = line[i + 1];
-    const lo = Math.min(a.x, b.x);
-    const hi = Math.max(a.x, b.x);
-    if (x < lo || x > hi) continue;
-    const y = hi === lo ? Math.min(a.y, b.y) : a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x);
-    if (best === null || y < best) best = y;
+    const y = segmentYAt(line[i], line[i + 1], x);
+    if (y !== null && (best === null || y < best)) best = y;
   }
   return best;
+}
+
+/**
+ * 複数の折れ線をまとめた「最も高い位置」を x ごとに素早く求める関数を作る。
+ * 線分を x 方向の区画に振り分けておき、問い合わせ時はその区画だけを調べる。
+ */
+function surfaceFinder(lines: Point[][], fallback: number): (x: number) => number {
+  const BUCKET = 10;
+  const buckets = new Map<number, [Point, Point][]>();
+  for (const line of lines) {
+    for (let i = 0; i < line.length - 1; i++) {
+      const a = line[i];
+      const b = line[i + 1];
+      const lo = Math.floor(Math.min(a.x, b.x) / BUCKET);
+      const hi = Math.floor(Math.max(a.x, b.x) / BUCKET);
+      for (let k = lo; k <= hi; k++) {
+        const list = buckets.get(k);
+        if (list) list.push([a, b]);
+        else buckets.set(k, [[a, b]]);
+      }
+    }
+  }
+  return x => {
+    let best = fallback;
+    for (const [a, b] of buckets.get(Math.floor(x / BUCKET)) ?? []) {
+      const y = segmentYAt(a, b, x);
+      if (y !== null && y < best) best = y;
+    }
+    return best;
+  };
 }
 
 
@@ -72,22 +105,42 @@ export function addLayer(state: GeoState, action: AddLayerAction): GeoState {
     (_, i) => -SIDE_MARGIN + ((viewWidth + SIDE_MARGIN * 2) * i) / SEGMENTS);
 
   // 現在の地表面（全層の上面のうち最も高い位置。層がなければ画面下端）
-  const surface = xs.map(x => {
-    let y = viewHeight;
-    for (const l of layers) {
-      const top = polylineYAt(layerEdges(l).top, x);
-      if (top !== null && top < y) y = top;
+  const tops = layers.map(l => layerEdges(l).top);
+  const surfaceAt = surfaceFinder(tops, viewHeight);
+
+  // 下面は等間隔の点に加えて既存の上面の頂点位置でも地表をなぞり、
+  // 断層の段差や層どうしの交点は細分化して角を正確に埋める
+  const minX = xs[0];
+  const maxX = xs[xs.length - 1];
+  const baseXs = [...new Set([
+    ...xs,
+    ...tops.flatMap(top => top.map(p => p.x)).filter(x => x > minX && x < maxX),
+  ])].sort((a, b) => a - b);
+  const baseSurface: Point[] = [];
+  /** 2 点間で地表が折れ曲がっていれば中点を足して細分化する（層どうしの交点など） */
+  const refine = (a: Point, b: Point, depth: number) => {
+    const mx = (a.x + b.x) / 2;
+    const my = surfaceAt(mx);
+    if (depth > 0 && b.x - a.x > FAULT_EPS * 2 && Math.abs(my - (a.y + b.y) / 2) > 0.25) {
+      const m = { x: mx, y: my };
+      refine(a, m, depth - 1);
+      baseSurface.push(m);
+      refine(m, b, depth - 1);
     }
-    return y;
+  };
+  baseXs.forEach((x, i) => {
+    const p = { x, y: surfaceAt(x) };
+    if (i > 0) refine(baseSurface[baseSurface.length - 1], p, 10);
+    baseSurface.push(p);
   });
 
   // 堆積物はくぼみを埋めて上面が水平になる。平らな地表ではそのまま厚さ分だけ積む
   // （厚さの基準は画面内に見えている地表の最高点）
-  const visibleSurface = surface.filter((_, i) => xs[i] >= 0 && xs[i] <= viewWidth);
+  const visibleSurface = baseSurface.filter(p => p.x >= 0 && p.x <= viewWidth).map(p => p.y);
   const newTopY = Math.min(...visibleSurface) - action.thickness;
   const bottom = layers.length === 0
     ? xs.map(x => ({ x, y: viewHeight + BASEMENT_DEPTH }))
-    : xs.map((x, i) => ({ x, y: surface[i] }));
+    : baseSurface;
 
   const vertices: Point[] = [
     ...xs.map(x => ({ x, y: newTopY })),  // 上面（左→右）
@@ -183,6 +236,9 @@ export function applyFault(state: GeoState, action: ApplyFaultAction): GeoState 
   const sideOf = (p: Point) =>
     (p.x - start.x) * (end.y - start.y) - (p.y - start.y) * (end.x - start.x);
 
+  // 断層線上（side = 0）の点は上盤側として動かす
+  const moves = (p: Point) => sideOf(p) <= 0;
+
   // 断層面に沿って y が 1 増えるときの x の変化量
   const dipX = end.y !== start.y ? (end.x - start.x) / (end.y - start.y) : 0;
 
@@ -194,9 +250,9 @@ export function applyFault(state: GeoState, action: ApplyFaultAction): GeoState 
       out.push({ ...a });
       const b = line[i + 1];
       if (!b) break;
+      if (moves(a) === moves(b)) continue;
       const sa = sideOf(a);
       const sb = sideOf(b);
-      if (sa === 0 || sb === 0 || (sa > 0) === (sb > 0)) continue;
       const len = Math.hypot(b.x - a.x, b.y - a.y);
       if (len < FAULT_EPS * 4) continue;
       const t = sa / (sa - sb);
@@ -213,7 +269,7 @@ export function applyFault(state: GeoState, action: ApplyFaultAction): GeoState 
     const top = splitAtFault(edges.top);
     const verts = [...top, ...splitAtFault(edges.bottom)];
     for (const p of verts) {
-      if (sideOf(p) > 0) continue; // 断層右側は動かさない
+      if (!moves(p)) continue; // 断層右側は動かさない
 
       if (type === 'normal') {
         // 正断層: 上盤が下方に滑る（Y 増加）

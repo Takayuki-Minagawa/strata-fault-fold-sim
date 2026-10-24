@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, ComponentType, ReactNode, SVGProps } from 'react';
+import type { CSSProperties, ComponentType, KeyboardEvent, ReactNode, SVGProps } from 'react';
 import { useGeoStore } from '../../store/useGeoStore';
 import { useUiStore } from '../../store/useUiStore';
 import type { ToolPanel } from '../../store/useUiStore';
@@ -83,6 +83,17 @@ function buildFault(type: FaultType, displacement: number, x: number, id: string
     end:   { x: x - offset, y: 500 },
     displacement,
   };
+}
+
+/** ラジオグループの矢印キー操作（選択を移し、フォーカスも移す） */
+function handleRadioKeys<T>(e: KeyboardEvent<HTMLElement>, values: T[], value: T, onChange: (v: T) => void) {
+  const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1
+    : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+  if (delta === 0) return;
+  e.preventDefault();
+  const next = (values.indexOf(value) + delta + values.length) % values.length;
+  onChange(values[next]);
+  e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
 }
 
 /** スマホ等の 1 カラム表示では、操作後に断面図までスクロールして結果を見せる */
@@ -214,7 +225,10 @@ export function Toolbar() {
                   togglePanel(tool.key as ToolPanel);
                 }
               }}
-              onPointerEnter={isErode ? () => setErodePreview(true) : undefined}
+              // レイアウトが動いて静止したカーソルの下に来ただけではプレビューしない
+              onPointerMove={isErode ? e => {
+                if (e.movementX !== 0 || e.movementY !== 0) setErodePreview(true);
+              } : undefined}
               onPointerLeave={isErode ? () => setErodePreview(false) : undefined}
               onFocus={isErode ? () => setErodePreview(true) : undefined}
               onBlur={isErode ? () => setErodePreview(false) : undefined}
@@ -254,7 +268,9 @@ export function Toolbar() {
               const selected = id === layerRock;
               return (
                 <button key={id} type="button" role="radio" aria-checked={selected}
+                  tabIndex={selected ? 0 : -1}
                   onClick={() => setLayerRock(id)}
+                  onKeyDown={e => handleRadioKeys(e, ROCK_IDS, layerRock, setLayerRock)}
                   className={[
                     'flex flex-col items-stretch gap-1 rounded-xl border p-1.5 text-[11px] font-medium transition-all',
                     'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-600',
@@ -403,7 +419,9 @@ function ChoiceGroup<T extends string>({ tool, label, value, onChange, options }
           const Icon = opt.icon;
           return (
             <button key={opt.value} type="button" role="radio" aria-checked={selected}
+              tabIndex={selected ? 0 : -1}
               onClick={() => onChange(opt.value)}
+              onKeyDown={e => handleRadioKeys(e, options.map(o => o.value), value, onChange)}
               title={opt.caption}
               className={[
                 'flex flex-col items-center gap-1 rounded-xl border px-1 py-2 text-center transition-all',
