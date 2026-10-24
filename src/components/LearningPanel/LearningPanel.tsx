@@ -134,6 +134,12 @@ function generateQuiz(
   const hasErode = active.some((e: HistoryEntry) => e.action.type === 'ERODE');
   const hasStress = active.some((e: HistoryEntry) => e.action.type === 'APPLY_STRESS');
 
+  // 断層の問題は最初に形成した断層の種類で出し分ける
+  const faultAction = active.find((e: HistoryEntry) => e.action.type === 'APPLY_FAULT');
+  const fType = faultAction
+    ? (faultAction.action as { fault: { type: string } }).fault.type
+    : 'normal';
+
   if (lang === 'ja') {
     if (hasFold) {
       questions.push({
@@ -145,10 +151,6 @@ function generateQuiz(
       });
     }
     if (hasFault) {
-      const faultAction = active.find((e: HistoryEntry) => e.action.type === 'APPLY_FAULT');
-      const fType = faultAction
-        ? (faultAction.action as { fault: { type: string } }).fault.type
-        : 'normal';
       if (fType === 'normal') {
         questions.push({
           id: 'fault-normal',
@@ -203,14 +205,33 @@ function generateQuiz(
         explanation: 'An arch-shaped upfold is called an anticline. A downfold (trough shape) is called a syncline.',
       });
     }
+    // 日本語と同じく最初の断層の種類に応じて出題する（id も揃え、言語を切り替えても同じ問題として数える）
     if (hasFault) {
-      questions.push({
-        id: 'fault-normal',
-        question: 'Which fault type is formed by horizontal tension?',
-        options: ['Normal fault', 'Reverse fault', 'Strike-slip fault', 'Anticline'],
-        answerIndex: 0,
-        explanation: 'Normal faults form under tension. The hanging wall (upper block) moves downward.',
-      });
+      if (fType === 'normal') {
+        questions.push({
+          id: 'fault-normal',
+          question: 'Which fault type is formed by horizontal tension?',
+          options: ['Normal fault', 'Reverse fault', 'Strike-slip fault', 'Anticline'],
+          answerIndex: 0,
+          explanation: 'Normal faults form under tension. The hanging wall (upper block) moves downward.',
+        });
+      } else if (fType === 'reverse') {
+        questions.push({
+          id: 'fault-reverse',
+          question: 'Which fault type is formed by horizontal compression?',
+          options: ['Normal fault', 'Reverse fault', 'Strike-slip fault', 'Syncline'],
+          answerIndex: 1,
+          explanation: 'Reverse faults form under horizontal compression. The hanging wall moves upward.',
+        });
+      } else {
+        questions.push({
+          id: 'fault-strike-slip',
+          question: 'Which fault type is formed by shear stress?',
+          options: ['Normal fault', 'Reverse fault', 'Strike-slip fault', 'Anticline'],
+          answerIndex: 2,
+          explanation: 'Strike-slip faults form under shear stress. The blocks on either side slide past each other horizontally.',
+        });
+      }
     }
     if (hasErode) {
       questions.push({
