@@ -99,7 +99,8 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   // キーボードでフォーカスしている地層の番号（マウス・タップでのフォーカスは記録しない）。
   // 元に戻す等で状態が変わってもフォーカスは同じ要素に残るので、状態には紐付けない
   const [focused, setFocused] = useState<number | null>(null);
-  // 最後にフォーカスしていた地層。その層が消えてフォーカスが失われたときに近くの層へ戻すため
+  // キーボードで最後にフォーカスしていた地層。その層が消えたときに近くの層へフォーカスを戻すため。
+  // マウス・タップ操作や地層以外へのフォーカス移動があった時点で忘れる
   const lastFocusRef = useRef<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -163,21 +164,38 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
     svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${idx}"]`)?.focus();
   };
 
-  // フォーカス中の地層が元に戻す・削剥などで消えたら、近くの地層（なければ断面図）へフォーカスを戻す
+  useEffect(() => {
+    const forget = () => { lastFocusRef.current = null; };
+    const onFocusIn = (e: FocusEvent) => {
+      if (!(e.target instanceof Element && e.target.closest('[data-layer-index]'))) forget();
+    };
+    document.addEventListener('pointerdown', forget, true);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('pointerdown', forget, true);
+      document.removeEventListener('focusin', onFocusIn);
+    };
+  }, []);
+
+  // キーボードでフォーカスしていた地層が元に戻す等で消えたら、近くの地層（なければ断面図）へ戻す
   useEffect(() => {
     const last = lastFocusRef.current;
-    if (last === null) return;
+    if (last === null || last < baseCount) return;
     const active = document.activeElement;
     if (active && active !== document.body) return;
-    if (baseCount > 0) {
-      svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${Math.min(last, baseCount - 1)}"]`)?.focus();
-    } else {
-      svgRef.current?.focus();
-    }
+    const target = baseCount > 0
+      ? svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${baseCount - 1}"]`)
+      : svgRef.current;
+    target?.focus({ preventScroll: true });
   }, [geoState, baseCount]);
 
   // ↑→ で上（新しい層）、↓← で下（古い層）、Home / End で最古 / 最新、Enter / Space で固定
   const handleLayerKey = (e: KeyboardEvent<SVGGElement>, idx: number) => {
+    // マウスでフォーカスした層でも、地層の操作キーを押した時点でキーボード操作として扱う
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(e.key)) {
+      lastFocusRef.current = idx;
+      setFocused(idx);
+    }
     const last = layers.length - 1;
     const next =
       e.key === 'ArrowUp' || e.key === 'ArrowRight' ? Math.min(idx + 1, last)
@@ -277,18 +295,18 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
           onPointerEnter={() => setHovered({ idx, at: geoState })}
           onPointerLeave={() => setHovered(h => (h?.idx === idx ? null : h))}
           onFocus={e => {
+            if (!isKeyboardFocus(e.currentTarget)) return;
             lastFocusRef.current = idx;
-            if (isKeyboardFocus(e.currentTarget)) setFocused(idx);
+            setFocused(idx);
           }}
-          onBlur={e => {
-            setFocused(f => (f === idx ? null : f));
-            // 別の要素へ移ったときだけ記録を消す（要素ごと消えた場合は relatedTarget が null）
-            if (e.relatedTarget !== null) lastFocusRef.current = null;
-          }}
+          onBlur={() => setFocused(f => (f === idx ? null : f))}
           onKeyDown={interactive && !preview ? e => handleLayerKey(e, idx) : undefined}
           onClick={e => {
             e.stopPropagation();
-            if (!preview) togglePin(idx);
+            if (preview) return;
+            // マウスで固定を解除したら、Tab 位置とずれないようにフォーカスも外す
+            if (pinnedIdx === idx && !isKeyboardFocus(e.currentTarget)) e.currentTarget.blur();
+            togglePin(idx);
           }}>
           <title>{`${rockName(layer.rockId)} — ${t.crossSection.layerOrder(layer.order)}`}</title>
           {/* 岩相色 */}
