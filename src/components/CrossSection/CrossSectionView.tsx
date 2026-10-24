@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useGeoStore } from '../../store/useGeoStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useTheme } from '../../hooks/useTheme';
@@ -59,6 +60,15 @@ function labelPosition(layer: Layer, faults: FaultLine[], width: number, height:
   return best && best.thick >= minThick && best.score > -500 ? best : null;
 }
 
+/** キーボード操作によるフォーカスか（マウス・タップでは枠や詳細を出さない） */
+function isKeyboardFocus(el: Element): boolean {
+  try {
+    return el.matches(':focus-visible');
+  } catch {
+    return true;
+  }
+}
+
 const FAULT_COLOR: Record<FaultLine['type'], string> = {
   normal: '#2563eb',
   reverse: '#e11d48',
@@ -86,7 +96,15 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   // 選んだ地層は「どの状態で選んだか」とともに記録し、元に戻す等で状態が変わったら解除する
   const [hovered, setHovered] = useState<{ idx: number; at: GeoState } | null>(null);
   const [pinned, setPinned] = useState<{ idx: number; at: GeoState } | null>(null);
+  // キーボードでフォーカスしている地層の番号（マウス・タップでのフォーカスは記録しない）。
+  // 元に戻す等で状態が変わってもフォーカスは同じ要素に残るので、状態には紐付けない
+  const [focused, setFocused] = useState<number | null>(null);
+  // キーボードで最後にフォーカスしていた地層。その層が消えたときに近くの層へフォーカスを戻すため。
+  // マウス・タップ操作や地層以外へのフォーカス移動があった時点で忘れる
+  const lastFocusRef = useRef<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const keyboardHintId = useId();
   // 画面が狭いと SVG が縮小されて文字が小さくなるので、文字・線を拡大して読みやすさを保つ
   const [scale, setScale] = useState(1);
 
@@ -123,7 +141,11 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
 
   const pinnedIdx = pinned?.at === geoState ? pinned.idx : null;
   const hoveredIdx = hovered?.at === geoState ? hovered.idx : null;
-  const activeIdx = preview ? null : (pinnedIdx ?? hoveredIdx);
+  const focusedIdx = focused !== null && focused < baseCount ? focused : null;
+  const activeIdx = preview ? null : (pinnedIdx ?? focusedIdx ?? hoveredIdx);
+  // キーボードでは地層を 1 つの Tab 位置にまとめ、矢印キーで層を移動する（ロービングタブインデックス）
+  // （マウスのホバーでは動かさない）
+  const tabStopIdx = preview ? null : (pinnedIdx ?? focusedIdx ?? (layers.length > 0 ? layers.length - 1 : null));
   // 凡例で強調中の岩相が断面から消えた場合（元に戻す等）は強調しない
   const effectiveHighlight = highlightRock !== null && layers.some(l => l.rockId === highlightRock)
     ? highlightRock : null;
@@ -134,6 +156,66 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
   const rockTop = visibleTops.length > 0 ? Math.min(...visibleTops) : height;
 
   const rockName = (id: RockId) => (lang === 'ja' ? ROCKS[id].nameJa : ROCKS[id].nameEn);
+
+  const togglePin = (idx: number) =>
+    setPinned(p => (p?.idx === idx && p.at === geoState ? null : { idx, at: geoState }));
+
+  const focusLayer = (idx: number) => {
+    svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${idx}"]`)?.focus();
+  };
+
+  useEffect(() => {
+    const forget = () => { lastFocusRef.current = null; };
+    const onFocusIn = (e: FocusEvent) => {
+      if (!(e.target instanceof Element && e.target.closest('[data-layer-index]'))) forget();
+    };
+    document.addEventListener('pointerdown', forget, true);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('pointerdown', forget, true);
+      document.removeEventListener('focusin', onFocusIn);
+    };
+  }, []);
+
+  // キーボードでフォーカスしていた地層が元に戻す等で消えたら、近くの地層（なければ断面図）へ戻す
+  useEffect(() => {
+    const last = lastFocusRef.current;
+    if (last === null || last < baseCount) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    const target = baseCount > 0
+      ? svgRef.current?.querySelector<SVGGElement>(`[data-layer-index="${baseCount - 1}"]`)
+      : svgRef.current;
+    target?.focus({ preventScroll: true });
+  }, [geoState, baseCount]);
+
+  // ↑→ で上（新しい層）、↓← で下（古い層）、Home / End で最古 / 最新、Enter / Space で固定
+  const handleLayerKey = (e: KeyboardEvent<SVGGElement>, idx: number) => {
+    // マウスでフォーカスした層でも、地層の操作キーを押した時点でキーボード操作として扱う
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(e.key)) {
+      lastFocusRef.current = idx;
+      setFocused(idx);
+    }
+    const last = layers.length - 1;
+    const next =
+      e.key === 'ArrowUp' || e.key === 'ArrowRight' ? Math.min(idx + 1, last)
+      : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? Math.max(idx - 1, 0)
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? last
+      : null;
+    if (next !== null) {
+      e.preventDefault();
+      if (pinnedIdx !== null) setPinned({ idx: next, at: geoState });
+      focusLayer(next);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      togglePin(idx);
+    } else if (e.key === 'Escape') {
+      // ツールパネルを閉じる全体のショートカットには渡さない
+      e.stopPropagation();
+      setPinned(null);
+    }
+  };
 
   // 岩相パターン定義
   const renderDefs = () => (
@@ -190,24 +272,47 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
     const patternId = rock.pattern !== 'none' ? rock.pattern : undefined;
     const isNew = isAddPreview && idx >= baseCount;
     const isActive = activeIdx === idx;
+    const isFocused = focusedIdx === idx;
+    // プレビューで追加される層以外は常にフォーカス可能にしておく（プレビュー中に tabindex を
+    // 外すとフォーカスが失われるため）。Tab で入れる位置はプレビュー中はなし
+    const interactive = idx < baseCount;
     const opacity = effectiveHighlight !== null && effectiveHighlight !== layer.rockId ? 0.22 : 1;
     const label = labelPosition(layer, faults, width, height, fs * 1.4);
 
     return (
       <g key={idx} className="layer-enter">
-        <g className={isNew ? 'preview-layer' : undefined}
+        <g className={`layer-hit ${isNew ? 'preview-layer' : ''}`}
           style={{ cursor: preview ? undefined : 'pointer' }}
+          data-layer-index={idx}
+          role={interactive ? 'button' : undefined}
+          tabIndex={interactive ? (!preview && idx === tabStopIdx ? 0 : -1) : undefined}
+          aria-pressed={interactive ? pinnedIdx === idx : undefined}
+          aria-label={interactive
+            ? `${rockName(layer.rockId)} — ${t.crossSection.layerOrder(layer.order)}${
+                layer.unconformityAbove ? `${lang === 'ja' ? '。' : '. '}${t.crossSection.unconformityNote}` : ''}`
+            : undefined}
+          aria-describedby={interactive ? keyboardHintId : undefined}
           onPointerEnter={() => setHovered({ idx, at: geoState })}
           onPointerLeave={() => setHovered(h => (h?.idx === idx ? null : h))}
+          onFocus={e => {
+            if (!isKeyboardFocus(e.currentTarget)) return;
+            lastFocusRef.current = idx;
+            setFocused(idx);
+          }}
+          onBlur={() => setFocused(f => (f === idx ? null : f))}
+          onKeyDown={interactive && !preview ? e => handleLayerKey(e, idx) : undefined}
           onClick={e => {
             e.stopPropagation();
-            if (!preview) setPinned(p => (p?.idx === idx && p.at === geoState ? null : { idx, at: geoState }));
+            if (preview) return;
+            // マウスで固定を解除したら、Tab 位置とずれないようにフォーカスも外す
+            if (pinnedIdx === idx && !isKeyboardFocus(e.currentTarget)) e.currentTarget.blur();
+            togglePin(idx);
           }}>
           <title>{`${rockName(layer.rockId)} — ${t.crossSection.layerOrder(layer.order)}`}</title>
           {/* 岩相色 */}
           <path className="layer-shape" d={path} fill={fill}
-            stroke={isActive ? textColor : isDark ? 'rgba(0,0,0,0.55)' : 'rgba(41,37,36,0.4)'}
-            strokeWidth={isActive ? 2.5 : 1}
+            stroke={isFocused ? '#0d9488' : isActive ? textColor : isDark ? 'rgba(0,0,0,0.55)' : 'rgba(41,37,36,0.4)'}
+            strokeWidth={isFocused ? 3.5 : isActive ? 2.5 : 1}
             strokeDasharray={isNew ? '6 4' : undefined}
             style={{ opacity }} />
           {/* テクスチャパターン */}
@@ -355,10 +460,18 @@ export function CrossSectionView({ width = 800, height = 500 }: Props) {
 
   return (
     <div ref={wrapRef} className="relative w-full overflow-hidden rounded-2xl bg-stone-100 shadow-sm ring-1 ring-stone-900/10 dark:bg-stone-900 dark:ring-white/10">
+      <span id={keyboardHintId} className="sr-only">{t.crossSection.keyboardHint}</span>
       <svg
+        ref={svgRef}
+        tabIndex={-1}
+        // 地層が 1 枚もなくなって断面図自体にフォーカスが移ったら、地層のフォーカス状態を消す
+        // （フォーカス中の要素が消えても blur は届かないため）
+        onFocus={e => {
+          if (e.target === e.currentTarget) setFocused(null);
+        }}
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
-        role="img"
+        role="group"
         aria-label={t.crossSection.ariaLabel(geoState.layers.length, geoState.faults.length)}
         style={{ display: 'block', touchAction: 'manipulation' }}
         onClick={() => setPinned(null)}
